@@ -23,15 +23,15 @@ from torch.utils.data import DataLoader
 class Generator(nn.Module):
     def __init__(self, fan_in, output_channels=1):
         super().__init__()
-        self.fc1 = nn.Linear(fan_in, 256 * 7 * 7)
-        self.conv1 = nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False)  # Output: (128, 14, 14)
-        self.conv2 = nn.ConvTranspose2d(128, output_channels, 4, 2, 1, bias=False)  # Output: (output_channels, 28, 28)
-        self.bn1 = nn.BatchNorm2d(128)
+        self.fc1 = nn.Linear(fan_in, 16 * 7 * 7)
+        self.conv1 = nn.ConvTranspose2d(16, 8, 4, 2, 1, bias=False)  # Output: (8, 14, 14)
+        self.conv2 = nn.ConvTranspose2d(8, output_channels, 4, 2, 1, bias=False)  # Output: (output_channels, 28, 28)
+        self.bn1 = nn.BatchNorm2d(8)
         self.relu = nn.ReLU()
         self.tanh = nn.Tanh()
 
     def forward(self, x):
-        x = self.fc1(x).view(-1, 256, 7, 7)
+        x = self.fc1(x).view(-1, 16, 7, 7)
         x = self.relu(x)
         x = self.relu(self.bn1(self.conv1(x)))
         x = self.tanh(self.conv2(x))
@@ -39,22 +39,22 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, input_channels=1):
         super(Discriminator, self).__init__()
-        self.conv1 = nn.Conv2d(input_channels, 64, 4, 2, 1, bias=False)
+        self.conv1 = nn.Conv2d(input_channels, 16, 4, 2, 1, bias=False)
         self.lrelu1 = nn.LeakyReLU(0.2, inplace=True)
         
-        self.conv2 = nn.Conv2d(64, 128, 4, 2, 1, bias=False)
-        self.bn2 = nn.BatchNorm2d(128)
+        self.conv2 = nn.Conv2d(16, 32, 4, 2, 1, bias=False)
+        self.bn2 = nn.BatchNorm2d(32)
         self.lrelu2 = nn.LeakyReLU(0.2, inplace=True)
         
-        self.conv3 = nn.Conv2d(128, 256, 4, 2, 1, bias=False)
-        self.bn3 = nn.BatchNorm2d(256)
+        self.conv3 = nn.Conv2d(32, 64, 4, 2, 1, bias=False)
+        self.bn3 = nn.BatchNorm2d(64)
         self.lrelu3 = nn.LeakyReLU(0.2, inplace=True)
         
-        self.conv4 = nn.Conv2d(256, 512, 3, 1, 1, bias=False)
-        self.bn4 = nn.BatchNorm2d(512)
+        self.conv4 = nn.Conv2d(64, 128, 3, 1, 1, bias=False)
+        self.bn4 = nn.BatchNorm2d(128)
         self.lrelu4 = nn.LeakyReLU(0.2, inplace=True)
         
-        self.conv5 = nn.Conv2d(512, 1, 3, 1, 0, bias=False)
+        self.conv5 = nn.Conv2d(128, 1, 3, 1, 0, bias=False)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
@@ -84,7 +84,6 @@ class Discriminator(nn.Module):
 transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5,), (0.5,)),
-
 ])
 
 
@@ -122,7 +121,7 @@ for i in range(num_epochs):
         real_targ = torch.ones((batch_size,1)).to(device)
         noise_sample, fake_targ = torch.randn(batch_size, noise_dim).to(device), torch.zeros((batch_size,1)).to(device)
         
-        if i % 3 == 0:
+        if i % 2 == 0:
             # discriminator
             fake_samples = generator(noise_sample)
             d_optim.zero_grad()
