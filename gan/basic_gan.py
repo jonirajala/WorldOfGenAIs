@@ -24,9 +24,9 @@ from torch.utils.data import DataLoader
 class Generator(nn.Module):
     def __init__(self, fan_in, fan_out):
         super().__init__()
-        self.fc1 = nn.Linear(fan_in, fan_out//2)
-        self.fc2 = nn.Linear(fan_out//2, fan_out//2)
-        self.fc3 = nn.Linear(fan_out//2, fan_out)
+        self.fc1 = nn.Linear(fan_in, fan_out*2)
+        self.fc2 = nn.Linear(fan_out*2, fan_out)
+        self.fc3 = nn.Linear(fan_out, fan_out)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -39,9 +39,9 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, fan_in):
         super().__init__()
-        self.fc1 = nn.Linear(fan_in, fan_in//2)
-        self.fc2 = nn.Linear(fan_in//2, fan_in//2)
-        self.fc3 = nn.Linear(fan_in//2, 1)
+        self.fc1 = nn.Linear(fan_in, fan_in*2)
+        self.fc2 = nn.Linear(fan_in*2, fan_in)
+        self.fc3 = nn.Linear(fan_in, 1)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -65,7 +65,7 @@ transform = transforms.Compose([
 
 
 device = "mps"
-noise_dim = 100
+noise_dim = 150
 batch_size = 64
 num_epochs = 5
 
@@ -98,17 +98,17 @@ for i in range(num_epochs):
         real_targ = torch.ones((batch_size,1)).to(device)
         noise_sample, fake_targ = torch.randn(batch_size, noise_dim).to(device), torch.zeros((batch_size,1)).to(device)
         
-        if i % 2 == 0:
+        # if i % 2 == 0:
             # discriminator
-            fake_samples = generator(noise_sample)
-            d_optim.zero_grad()
-            real_out = discriminator(real_samples)
-            fake_out = discriminator(fake_samples.detach())
-            real_loss = criterion( real_out, real_targ)
-            fake_loss = criterion(fake_out, fake_targ)
-            d_loss = real_loss + fake_loss
-            d_loss.backward()
-            d_optim.step()
+        fake_samples = generator(noise_sample)
+        d_optim.zero_grad()
+        real_out = discriminator(real_samples)
+        fake_out = discriminator(fake_samples.detach())
+        real_loss = criterion( real_out, real_targ)
+        fake_loss = criterion(fake_out, fake_targ)
+        d_loss = real_loss + fake_loss
+        d_loss.backward()
+        d_optim.step()
 
 
         # for j in range(3):
