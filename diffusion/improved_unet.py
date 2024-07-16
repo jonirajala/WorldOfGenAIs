@@ -148,7 +148,7 @@ class TimestepEmbedding(nn.Module):
         t = self.act(self.linear_1(t))
         return self.linear_2(t)
 
-class BasicUNet(nn.Module):
+class UNet(nn.Module):
     def __init__(self, sample_size=28,    # the target image resolution
                 in_channels=1,            # the number of input channels, 3 for RGB images
                 out_channels=1,           # the number of output channels
@@ -195,6 +195,8 @@ class BasicUNet(nn.Module):
         x = self.conv_act(x)
         x = self.conv_out(x)
         return x
+    
+
 def add_noise(image, beta, timesteps):
     """
     Add noise to an image according to the DDPM process.
@@ -234,12 +236,12 @@ transform = transforms.Compose([
 
 # Device configuration
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-
+print(device)
 # Hyperparameters
-batch_size = 8
+batch_size = 4
 num_epochs = 1
 learning_rate = 3e-4
-timesteps = 8
+timesteps = 16
 
 # MNIST dataset
 mnist_trainset = MNIST(root='./data', train=True, download=True, transform=transform)
@@ -250,14 +252,14 @@ train_loader = DataLoader(mnist_trainset, batch_size=batch_size, shuffle=True)
 
 # Model initialization
 img_size = mnist_trainset.data.shape[-1] ** 2
-unet = BasicUNet().to(device)
+unet = UNet().to(device)
 
 # Loss and optimizer
 criterion = nn.MSELoss()
 optimizer = optim.Adam(unet.parameters(), lr=learning_rate)
 
 # Beta schedule
-beta = torch.linspace(0.1, 0.2, timesteps).to(device)
+beta = torch.linspace(0.1, 0.5, timesteps).to(device)
 
 # Training the model
 losses = []
@@ -271,6 +273,13 @@ for epoch in range(num_epochs):
         
         noisy_samples, noise = add_noise(samples, beta, timesteps)
         
+        
+        #### --- check immediate values of noisy samples
+
+
+
+
+
         # Reshape noisy samples and noise to have correct dimensions for the UNet
         noisy_samples = noisy_samples.view(-1, 1, 28, 28)
         noise = noise.view(-1, 1, 28, 28)
@@ -286,9 +295,7 @@ for epoch in range(num_epochs):
         losses.append(loss.item())
         if i % 100 == 0:
             print(f"{i} / {len(train_loader)}, loss {epoch_loss / (i+1)}")
-        
-
-        if i == 200:
+        if i == 8000:
             break
     print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {epoch_loss / len(train_loader):.4f}")
 
@@ -302,34 +309,50 @@ plt.xlabel('Iterations')
 plt.ylabel('Loss')
 plt.show()
 
-# Define the noise schedule (simple linear schedule for demonstration)
-def linear_noise_schedule(t, n_steps):
-    return 1 - (t / n_steps)
 
-# Denoising process
-n_steps = 20
-x = torch.rand(2, 1, 28, 28).to(device)  # Starting from random noise
-denoising_images = []
 
-for i in range(n_steps):
+def denoise_image(model, timesteps, img_size, beta_schedule, device):
+    intermediate_images = []  # List to store intermediate images
     with torch.no_grad():
-        t = n_steps - i - 1
-        noise_scale = linear_noise_schedule(t, n_steps)
-        pred_noise = unet(x, t)
-        x = (x - noise_scale * pred_noise) / (1 - noise_scale)
+        # Start from a random noise image
+        x_t = torch.randn(1, 1, img_size, img_size).to(device)
+        
+        for t in reversed(range(1, timesteps + 1)):
+            beta_t = beta_schedule[t - 1]
+            
+            # Predict the noise added at this timestep
+            # t_tensor = torch.tensor([t]).float()
+            predicted_noise = model(x_t, t)
+            
+            # Remove the predicted noise
+            x_t = (x_t - torch.sqrt(beta_t) * predicted_noise) / torch.sqrt(1 - beta_t)
+            
+            # Add the noise scaled by the variance for this timestep
+            if t > 1:
+                z = torch.randn_like(x_t)
+                x_t = x_t + torch.sqrt(beta_t) * z
+            
+            # Save intermediate image
+            intermediate_images.append(x_t.cpu().squeeze().numpy())
+    
+    # Return the denoised image and intermediate images
+    return x_t, intermediate_images
 
-    # Store denoised images at each step
-    denoising_images.append(x.detach().cpu())
+# Define the image size and beta schedule
+img_size = 28
+beta_schedule = torch.linspace(0.1, 0.5, timesteps).to(device)
 
-# Plot denoising process
-fig, axs = plt.subplots(4, 5, figsize=(20, 16))  # Adjusted the layout and size
-for i, ax in enumerate(axs.flatten()):
-    if i < len(denoising_images):
-        img_grid = torchvision.utils.make_grid(denoising_images[i], nrow=2, padding=1, normalize=True)
-        ax.imshow(img_grid.permute(1, 2, 0))
-        ax.axis('off')
-    else:
-        ax.remove()
+# Denoise the image
+denoised_image, intermediate_images = denoise_image(unet, timesteps, img_size, beta_schedule, device)
 
-plt.suptitle('Denoising Process Over Time', fontsize=20)
+plt.figure(figsize=(10, 10))
+
+# Plot the intermediate steps
+num_plots = min(len(intermediate_images), 16)  # Limit to 9 intermediate plots for display
+for i in range(num_plots):
+    plt.subplot(4, 4, i+1)
+    plt.imshow(intermediate_images[i], cmap='gray')
+    plt.title(f'Step {timesteps - i}')
+
+plt.tight_layout()
 plt.show()
