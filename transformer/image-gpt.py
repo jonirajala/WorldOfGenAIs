@@ -14,13 +14,6 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import math
 from tqdm.auto import tqdm
-
-
-
-from torch import nn
-import torch
-import math
-from torch.nn import functional as F
 from torchtune.modules import RMSNorm, RotaryPositionalEmbeddings
 
 
@@ -196,11 +189,6 @@ class Config:
         self.dt_rank = dt_rank
         self.d_state = d_state
 
-
-class FlattenTransform:
-    def __call__(self, sample):
-        return sample.view(-1)
-
 class FlattenAndQuantizeTransform:
     def __call__(self, sample):
         # Normalize to [0, 1]
@@ -213,7 +201,6 @@ class FlattenAndQuantizeTransform:
 # Define transformations
 transform = transforms.Compose([
     transforms.ToTensor(),
-    # transforms.Normalize((0.5,), (0.5,)),
     FlattenAndQuantizeTransform()
 ])
 
@@ -222,7 +209,7 @@ device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
 # Hyperparameters
 batch_size = 16
-num_epochs = 0
+num_epochs = 1
 learning_rate = 3e-4
 
 # MNIST dataset
@@ -235,15 +222,11 @@ train_loader = DataLoader(mnist_trainset, batch_size=batch_size, shuffle=True)
 # Model initialization
 img_size = mnist_trainset.data.shape[-1] ** 2
 img, label = next(iter(train_loader))
-config = Config(vocab_size=255, emb_dim=128, n_head=4, n_layers=4)
+config = Config(vocab_size=255, emb_dim=256, n_head=8, n_layers=8)
 gpt = GPT(config).to(device)
 
 # Loss and optimizer
 optimizer = optim.AdamW(gpt.parameters(), lr=learning_rate)
-
-# KL Divergence calculation
-def kl_divergence(mu, var):
-    return -0.5 * torch.sum(1 + var - mu.pow(2) - var.exp())
 
 # Training the model
 losses = []
@@ -256,8 +239,8 @@ for epoch in range(num_epochs):
         x, y = samples[:, :-1], samples[:, 1:]
         x, y = x.to(device), y.to(device)
         optimizer.zero_grad()
-        
-        out, loss = gpt(x, y)
+
+        out, loss = gpt(x=x, y=y, start_pos=0)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(gpt.parameters(), 1.0)
         optimizer.step()
@@ -266,6 +249,9 @@ for epoch in range(num_epochs):
         losses.append(loss.item())
         pbar.set_postfix({"train_loss": loss.item()})
         
+        if i == 1875:
+            break
+
     print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {epoch_loss / len(train_loader):.4f}")
 
 # Plotting the loss
@@ -290,9 +276,6 @@ def generate_images(model, num_images=5, temperature=1.0, top_k=None):
         print(f"{i} images generated")
     
     return generated_images
-
-# Load the trained model weights (if not already loaded)
-# gpt.load_state_dict(torch.load('model_weights.pth'))
 
 # Generate new images
 num_images = 2
